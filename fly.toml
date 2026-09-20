@@ -1,0 +1,18 @@
+# App name must be globally unique across all of Fly.io — change this.
+app = "alert-bot-wei"
+primary_region = "nrt" # pick the region closest to you: https://fly.io/docs/reference/regions/
+
+[build]
+
+[env]
+  DB_PATH = "/data/alertbot.db"
+  POLL_INTERVAL_MINUTES = "5"
+  # BOT_TOKEN is a secret, not set here — see README (fly secrets set).
+
+[[mounts]]
+  source = "alertbot_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
