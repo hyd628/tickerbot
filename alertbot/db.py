@@ -24,9 +24,13 @@ CREATE TABLE IF NOT EXISTS watches (
     interval_minutes REAL
 );
 
+-- Per-chat settings (e.g. each chat's own default poll interval). Keyed by
+-- (chat_id, key) so one chat's setting can never leak into another chat.
 CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
+    chat_id INTEGER NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (chat_id, key)
 );
 """
 
@@ -65,6 +69,19 @@ def _migrate_add_interval_column(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE watches ADD COLUMN interval_minutes REAL")
 
 
+def _migrate_settings_chat_scope(conn: sqlite3.Connection) -> None:
+    """Older databases had a single global `settings` row with no chat_id,
+    meaning one chat's /setinterval silently changed the default for every
+    chat using the bot. Rebuild the table scoped by chat_id. There's no way
+    to attribute the old global value to a specific chat, so it's dropped;
+    chats fall back to POLL_INTERVAL_MINUTES until they set their own again."""
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(settings)").fetchall()}
+    if "chat_id" in cols:
+        return
+    conn.execute("DROP TABLE IF EXISTS settings")
+    conn.executescript(SCHEMA)
+
+
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(config.DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -87,6 +104,7 @@ def init_db() -> None:
         conn.executescript(SCHEMA)
         _migrate_watches_chain_check(conn)
         _migrate_add_interval_column(conn)
+        _migrate_settings_chat_scope(conn)
 
 
 def add_watch(
@@ -143,19 +161,38 @@ def all_watches() -> list[sqlite3.Row]:
         return conn.execute("SELECT * FROM watches").fetchall()
 
 
-def get_setting(key: str, default: Optional[str] = None) -> Optional[str]:
+def get_chat_setting(chat_id: int, key: str, default: Optional[str] = None) -> Optional[str]:
     with get_conn() as conn:
-        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        row = conn.execute(
+            "SELECT value FROM settings WHERE chat_id = ? AND key = ?", (chat_id, key)
+        ).fetchone()
         return row["value"] if row else default
 
 
-def set_setting(key: str, value: str) -> None:
+def set_chat_setting(chat_id: int, key: str, value) -> None:
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO settings (key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (key, str(value)),
+            "INSERT INTO settings (chat_id, key, value) VALUES (?, ?, ?) "
+            "ON CONFLICT(chat_id, key) DO UPDATE SET value = excluded.value",
+            (chat_id, key, str(value)),
         )
+
+
+def all_chat_settings(key: str) -> dict:
+    """Map of chat_id -> value (as stored) for every chat that has set this key."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT chat_id, value FROM settings WHERE key = ?", (key,)).fetchall()
+        return {row["chat_id"]: row["value"] for row in rows}
+
+
+def min_chat_setting(key: str) -> Optional[float]:
+    """Smallest value set for this key across all chats, or None if no chat
+    has set it (i.e. everyone is still on the config-file default)."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT MIN(CAST(value AS REAL)) AS m FROM settings WHERE key = ?", (key,)
+        ).fetchone()
+        return row["m"] if row and row["m"] is not None else None
 
 
 def set_watch_interval(chat_id: int, watch_id: int, minutes: Optional[float]) -> bool:

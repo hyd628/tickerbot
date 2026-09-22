@@ -1,12 +1,34 @@
 # alertbot
 
 A Telegram bot that alerts you when the price of a Solana, Sui, Ethereum or
-Bitcoin token moves by more than a threshold percentage. Prices come from
-the [CoinGecko API](https://www.coingecko.com/en/api), looked up either by
-CoinGecko coin id (e.g. `solana`, `sui`, `ethereum`, `bitcoin`, `bonk`) or,
-for Solana/Sui/Ethereum, by on-chain contract / coin-type address. Bitcoin
-has no general token-contract standard, so it's id-only (native BTC, or
-other coins CoinGecko tracks by id).
+Bitcoin token moves by more than a threshold percentage.
+
+## Price sources
+
+Prices can come from more than one source. Each source (currently
+[Pyth Network](https://pyth.network) and the
+[CoinGecko API](https://www.coingecko.com/en/api)) is tried in priority
+order — `alertbot/prices.py`'s `SOURCE_PRIORITY` — and the first one that
+actually has a price for that specific asset wins; anything a source
+doesn't cover just falls through to the next one. Every price shown by the
+bot (`/watch`, `/price`, `/prices`, and alert messages) says which source
+it came from, e.g. `[Pyth]` or `[CoinGecko]`.
+
+- **Pyth** covers a small, explicit set of Solana assets (native SOL,
+  JitoSOL, the PYTH token — see `FEED_IDS` in `alertbot/pyth.py`) when
+  `PYTH_API_KEY` is configured. Pyth doesn't offer a general way to resolve
+  an arbitrary contract address to a feed, so this list is manually
+  maintained rather than automatic. Note that Pyth's free trial key's asset
+  whitelist does not currently include a Sui feed, so Sui watches always
+  fall through to CoinGecko regardless of whether a key is configured.
+- **CoinGecko** is the universal fallback: it covers almost anything, by
+  CoinGecko coin id (e.g. `solana`, `sui`, `ethereum`, `bitcoin`, `bonk`)
+  or, for Solana/Sui/Ethereum, by on-chain contract/coin-type address.
+  Bitcoin has no general token-contract standard, so it's id-only.
+
+Adding a new source is just a new module with a `NAME` and a
+`get_prices(chain, ref_type, token_refs)` function, registered in
+`prices._SOURCES` and added to `SOURCE_PRIORITY`.
 
 ## Setup
 
@@ -26,7 +48,19 @@ other coins CoinGecko tracks by id).
    cp .env.example .env
    ```
 
-4. Run the bot:
+4. (Optional) Get a Pyth API key to use Pyth instead of CoinGecko for a few
+   Solana assets (SOL, JitoSOL, PYTH — see `alertbot/pyth.py` for the exact
+   list): sign up for a free account at
+   [Pyth Terminal](https://terminal.pyth.network) and copy your API key into
+   `PYTH_API_KEY` in `.env`. This gets you a free trial, but its asset
+   whitelist is fixed by Pyth (fine-tuned crypto majors, no Sui feed) and,
+   as of the August 2026 Pyth Core upgrade, sustained/high-volume use of
+   Hermes requires a paid Pyth Pro plan (starting around $500/month) — worth
+   it for a hackathon demo, but think about the cost before relying on it
+   long-term. Leave it blank to just use CoinGecko for everything, which is
+   free and requires no signup.
+
+5. Run the bot:
 
    ```bash
    python main.py
@@ -42,29 +76,34 @@ other coins CoinGecko tracks by id).
   - `/watch ethereum 0xdAC17F958D2ee523a2206206994597C13D831ec7 5 USDT`
   - `/watch bitcoin bitcoin 3 BTC` (bitcoin is id-only)
   - `/watch solana bonk 10 BONK` (using a CoinGecko coin id)
-- `/list` — show your active watches and their last known price.
+- `/list` — show your active watches and their last known (cached) price.
+- `/prices` — fetch and show the current live price of every asset you're
+  watching, once per asset even if several of your watches point at the
+  same one (e.g. two thresholds on the same token).
 - `/unwatch <id>` — stop watching (id comes from `/list`).
-- `/price <chain> <address_or_id>` — check a price on demand.
-- `/setinterval [minutes]` — change the *default* polling interval, used by
-  any watch that doesn't have its own override (no args to see the current
-  default and the actual check frequency). Persists in the database, so
-  `POLL_INTERVAL_MINUTES` in `.env` is only the starting point before anyone
-  runs `/setinterval`.
-- `/setinterval [id] [minutes|default]` — give a single watch (id from
-  `/list`) its own polling interval, independent of the default — e.g.
-  `/setinterval 3 1` checks watch 3 every minute regardless of the global
-  setting. `/setinterval 3 default` removes the override.
+- `/price <chain> <address_or_id>` — check the live price of any token,
+  whether you're watching it or not.
+- `/setinterval [minutes]` — change *your* default polling interval, used by
+  your watches that don't have their own override (no args to see your
+  current default). This is per-chat: it never affects other chats using
+  the same bot. `POLL_INTERVAL_MINUTES` in `.env` is only the fallback
+  before any chat has run `/setinterval`.
+- `/setinterval [id] [minutes|default]` — give a single watch of yours (id
+  from `/list`) its own polling interval, independent of your default — e.g.
+  `/setinterval 3 1` checks watch 3 every minute regardless of your default.
+  `/setinterval 3 default` removes the override.
 - `/help` — show usage.
 
-Each watch is checked on its own interval (its override if it has one,
-otherwise the global default) — the scheduler internally ticks at whatever
-the smallest interval in use is, but only actually fetches a price for a
-watch once its own interval has elapsed, so giving one watch a fast
-interval doesn't make every other watch poll that fast too. When a token's
-price moves by at least its threshold percentage since the last check (or
-since it started being watched), the bot sends an alert and resets the
-baseline to the new price, so alerts track the size of each subsequent move
-rather than firing repeatedly for the same move.
+Each watch is checked on its own interval: its own override if it has one,
+otherwise its chat's default, otherwise the `.env` fallback. Internally the
+scheduler wakes up at whatever the smallest interval in use is *anywhere*
+(across every chat and watch), but only actually fetches a price for a
+watch once that specific watch's own interval has elapsed — so one chat (or
+one watch) using a fast interval never speeds up anyone else's watches.
+When a token's price moves by at least its threshold percentage since the
+last check (or since it started being watched), the bot sends an alert and
+resets the baseline to the new price, so alerts track the size of each
+subsequent move rather than firing repeatedly for the same move.
 
 ## Deploying to Fly.io
 

@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -24,12 +25,14 @@ HELP_TEXT = (
     "a contract/coin-type address (solana/sui/ethereum only) or a CoinGecko coin id (e.g. <code>solana</code>, "
     "<code>bitcoin</code>, <code>bonk</code>). Bitcoin has no token contracts, so it's id-only.\n"
     "<code>/list</code> — show your active watches\n"
+    "<code>/prices</code> — show the current price of every asset you're watching (once each, even if "
+    "you have more than one watch on the same asset)\n"
     "<code>/unwatch [id]</code> — stop watching (id from /list)\n"
-    "<code>/price [chain] [address_or_id]</code> — check a price right now\n"
-    "<code>/setinterval [minutes]</code> — change the default polling interval for every watch "
+    "<code>/price [chain] [address_or_id]</code> — check the price of any token, watched or not\n"
+    "<code>/setinterval [minutes]</code> — change your default polling interval, for your watches only "
     "(no args to check the current value)\n"
-    "<code>/setinterval [id] [minutes|default]</code> — give one watch (see /list for ids) its own "
-    "polling interval, or 'default' to go back to the global one\n"
+    "<code>/setinterval [id] [minutes|default]</code> — give one of your watches (see /list for ids) its own "
+    "polling interval, or 'default' to go back to your default\n"
     "<code>/help</code> — show this message\n\n"
     "Example:\n"
     "<code>/watch solana So11111111111111111111111111111111111111112 5 SOL</code>\n"
@@ -40,15 +43,20 @@ HELP_TEXT = (
 
 
 def _effective_tick_minutes() -> float:
-    """How often the scheduler actually needs to run: the smallest interval
-    across the global default and any per-watch overrides. check_prices()
-    still only fetches prices for watches whose own interval has elapsed, so
-    a small per-watch override doesn't make every other watch poll faster."""
-    global_default = float(db.get_setting(config.INTERVAL_SETTING_KEY, str(config.POLL_INTERVAL_MINUTES)))
-    per_watch_min = db.min_watch_interval()
-    if per_watch_min is not None:
-        return min(global_default, per_watch_min)
-    return global_default
+    """How often the scheduler process actually needs to wake up: the
+    smallest interval in use anywhere (the config-file fallback, any chat's
+    own default, or any watch's own override). This is just the scheduler's
+    wake-up cadence, not what any individual watch is checked against —
+    check_prices() resolves each watch against its own chat's setting only,
+    so one chat setting a fast interval never speeds up another chat."""
+    candidates = [config.POLL_INTERVAL_MINUTES]
+    chat_min = db.min_chat_setting(config.INTERVAL_SETTING_KEY)
+    if chat_min is not None:
+        candidates.append(chat_min)
+    watch_min = db.min_watch_interval()
+    if watch_min is not None:
+        candidates.append(watch_min)
+    return min(candidates)
 
 
 def _reschedule_price_job(application: Application, minutes: float) -> None:
@@ -104,7 +112,7 @@ async def watch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ref_type = prices.guess_ref_type(chain, token_ref)
 
     try:
-        baseline_price = prices.get_price(chain, ref_type, token_ref)
+        baseline = prices.get_price(chain, ref_type, token_ref)
     except Exception as exc:
         logger.exception("Price lookup failed for %s:%s", chain, token_ref)
         await update.effective_message.reply_text(f"Couldn't fetch a price for that token: {exc}")
@@ -116,14 +124,14 @@ async def watch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ref_type=ref_type,
         token_ref=token_ref,
         threshold_pct=threshold_pct,
-        baseline_price=baseline_price,
+        baseline_price=baseline.price,
         label=label,
     )
 
     name = label or token_ref
     await update.effective_message.reply_text(
         f"Watching {name} on {chain} (id {watch_id}). "
-        f"Current price: ${baseline_price:.6g}. "
+        f"Current price: ${baseline.price:.6g} (via {baseline.source}). "
         f"You'll be alerted on moves of {threshold_pct}% or more."
     )
 
@@ -152,15 +160,61 @@ async def list_watches(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.effective_message.reply_text("No active watches. Use /watch to add one.")
         return
 
+    chat_default = float(
+        db.get_chat_setting(update.effective_chat.id, config.INTERVAL_SETTING_KEY, str(config.POLL_INTERVAL_MINUTES))
+    )
+
     lines = ["Your watches:"]
     for row in rows:
         name = row["label"] or row["token_ref"]
         line = f"#{row['id']} {name} ({row['chain']}) — threshold {row['threshold_pct']}%"
         if row["interval_minutes"] is not None:
             line += f", every {row['interval_minutes']:g} min"
+        else:
+            line += f", every {chat_default:g} min (default)"
         if row["last_price"] is not None:
             line += f", last price ${row['last_price']:.6g}"
         lines.append(line)
+    await update.effective_message.reply_text("\n".join(lines))
+
+
+async def prices_watched(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    rows = db.list_watches(update.effective_chat.id)
+    if not rows:
+        await update.effective_message.reply_text("No active watches. Use /watch to add one.")
+        return
+
+    # Multiple watches can point at the exact same asset (e.g. two different
+    # thresholds on the same token) — dedupe by (chain, ref_type, token_ref)
+    # so it's only fetched, and shown, once.
+    seen = {}
+    order = []
+    for row in rows:
+        key = (row["chain"], row["ref_type"], row["token_ref"].lower())
+        if key not in seen:
+            seen[key] = row["label"] or row["token_ref"]
+            order.append(key)
+
+    groups: dict[tuple[str, str], list[str]] = defaultdict(list)
+    for chain, ref_type, token_ref_lower in order:
+        groups[(chain, ref_type)].append(token_ref_lower)
+
+    fetched: dict[tuple[str, str], dict] = {}
+    for (chain, ref_type), refs in groups.items():
+        try:
+            fetched[(chain, ref_type)] = prices.get_prices(chain, ref_type, refs)
+        except Exception:
+            logger.exception("Failed to fetch prices for %s/%s: %s", chain, ref_type, refs)
+
+    lines = ["Current prices:"]
+    for chain, ref_type, token_ref_lower in order:
+        name = seen[(chain, ref_type, token_ref_lower)]
+        result = fetched.get((chain, ref_type), {}).get(token_ref_lower)
+        if result is None:
+            lines.append(f"{name} ({chain}): unavailable right now")
+        else:
+            lines.append(f"{name} ({chain}): ${result.price:.6g} [{result.source}]")
+
     await update.effective_message.reply_text("\n".join(lines))
 
 
@@ -183,19 +237,20 @@ async def price_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.effective_message.reply_text(f"Couldn't fetch a price for that token: {exc}")
         return
 
-    await update.effective_message.reply_text(f"{token_ref} ({chain}): ${current:.6g}")
+    await update.effective_message.reply_text(f"{token_ref} ({chain}): ${current.price:.6g} [{current.source}]")
 
 
 async def set_interval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     args = context.args
 
+    chat_id = update.effective_chat.id
+
     if not args:
-        default = db.get_setting(config.INTERVAL_SETTING_KEY, str(config.POLL_INTERVAL_MINUTES))
-        tick = _effective_tick_minutes()
+        default = db.get_chat_setting(chat_id, config.INTERVAL_SETTING_KEY, str(config.POLL_INTERVAL_MINUTES))
         await update.effective_message.reply_text(
-            f"Default polling interval: {default} minute(s) (used by watches with no override).\n"
-            f"Actual check frequency right now: every {tick:g} minute(s), the smallest interval in use.\n"
-            f"Usage: /setinterval [minutes] to change the default, or "
+            f"Your default polling interval: {default} minute(s) (used by your watches with no override).\n"
+            f"This only affects your own watches, not other chats using this bot.\n"
+            f"Usage: /setinterval [minutes] to change your default, or "
             f"/setinterval [id] [minutes|default] to override one watch (see /list for ids)."
         )
         return
@@ -210,10 +265,13 @@ async def set_interval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await update.effective_message.reply_text("minutes must be greater than 0.")
             return
 
-        db.set_setting(config.INTERVAL_SETTING_KEY, minutes)
+        db.set_chat_setting(chat_id, config.INTERVAL_SETTING_KEY, minutes)
         _reschedule_price_job(context.application, _effective_tick_minutes())
 
-        reply = f"Default polling interval set to {minutes} minute(s) for watches without their own override."
+        reply = (
+            f"Your default polling interval is now {minutes} minute(s), for your watches without "
+            f"their own override. This doesn't affect other chats using this bot."
+        )
         if minutes < 1:
             reply += (
                 " Note: polling more than once a minute across multiple chains/tokens can hit "
@@ -226,7 +284,7 @@ async def set_interval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         watch_id = int(args[0])
     except ValueError:
         await update.effective_message.reply_text(
-            "Usage: /setinterval [minutes] (global default) or "
+            "Usage: /setinterval [minutes] (your default) or "
             "/setinterval [id] [minutes|default] (one watch, id from /list)."
         )
         return
@@ -245,7 +303,7 @@ async def set_interval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await update.effective_message.reply_text("minutes must be greater than 0.")
             return
 
-    updated = db.set_watch_interval(update.effective_chat.id, watch_id, minutes)
+    updated = db.set_watch_interval(chat_id, watch_id, minutes)
     if not updated:
         await update.effective_message.reply_text(f"No watch with id {watch_id} for this chat.")
         return
@@ -270,6 +328,7 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("watch", watch))
     application.add_handler(CommandHandler("unwatch", unwatch))
     application.add_handler(CommandHandler("list", list_watches))
+    application.add_handler(CommandHandler("prices", prices_watched))
     application.add_handler(CommandHandler("price", price_cmd))
     application.add_handler(CommandHandler("setinterval", set_interval))
     application.add_error_handler(on_error)
