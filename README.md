@@ -14,13 +14,14 @@ doesn't cover just falls through to the next one. Every price shown by the
 bot (`/watch`, `/price`, `/prices`, and alert messages) says which source
 it came from, e.g. `[Pyth]` or `[CoinGecko]`.
 
-- **Pyth** covers a small, explicit set of Solana assets (native SOL,
-  JitoSOL, the PYTH token — see `FEED_IDS` in `alertbot/pyth.py`) when
-  `PYTH_API_KEY` is configured. Pyth doesn't offer a general way to resolve
-  an arbitrary contract address to a feed, so this list is manually
-  maintained rather than automatic. Note that Pyth's free trial key's asset
-  whitelist does not currently include a Sui feed, so Sui watches always
-  fall through to CoinGecko regardless of whether a key is configured.
+- **Pyth** covers a small, explicit set of assets (native SOL, JitoSOL, the
+  PYTH token, native BTC, native ETH — see `FEED_IDS` in
+  `alertbot/pyth.py`) when `PYTH_API_KEY` is configured. Pyth doesn't offer
+  a general way to resolve an arbitrary contract address to a feed, so this
+  list is manually maintained rather than automatic, and is restricted to
+  whatever's on your key's plan — the free trial's whitelist notably does
+  NOT include a Sui feed, so Sui watches always fall through to CoinGecko
+  regardless of whether a key is configured.
 - **CoinGecko** is the universal fallback: it covers almost anything, by
   CoinGecko coin id (e.g. `solana`, `sui`, `ethereum`, `bitcoin`, `bonk`)
   or, for Solana/Sui/Ethereum, by on-chain contract/coin-type address.

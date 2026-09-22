@@ -1,4 +1,4 @@
-"""Pyth Network (Hermes) price feeds for Solana assets.
+"""Pyth Network (Hermes) price feeds.
 
 Pyth identifies assets by opaque feed IDs (e.g. "Crypto.SOL/USD"), not by
 chain + contract address like CoinGecko, so there's no general way to
@@ -16,11 +16,11 @@ may require a paid Pyth Pro plan. If no key is configured, or Hermes is
 unreachable/unauthorized, get_prices() simply returns no results so callers
 fall back cleanly rather than breaking.
 
-Note: the free trial key's asset whitelist does NOT include Crypto.SUI/USD
-(confirmed 2026-09-22), only a fixed list of major crypto/equity/FX feeds —
-so despite the module name, Sui isn't covered here at all right now; every
-Sui watch always falls back to CoinGecko. FEED_IDS only lists assets
-confirmed to be on that whitelist and relevant to Solana.
+Note: the free trial key's asset whitelist is a fixed list of major
+crypto/equity/FX feeds (confirmed 2026-09-22) rather than full Hermes
+coverage — notably it does NOT include Crypto.SUI/USD, so every Sui watch
+always falls back to CoinGecko regardless of key. FEED_IDS only lists
+assets confirmed to be on that whitelist.
 """
 
 import logging
@@ -52,6 +52,10 @@ FEED_IDS: dict[tuple[str, str], str] = {
     ("solana", "pyth-network"): "0bbf28e9a841a1cc788f6a361b17ca072d0ea3098a1e5df1c3922d06719579ff",
     ("solana", "hz1jovnivvgrgniiyveozevgz58xau3rkwx8eacqbct3"):
         "0bbf28e9a841a1cc788f6a361b17ca072d0ea3098a1e5df1c3922d06719579ff",
+    # Native BTC: CoinGecko id "bitcoin" (bitcoin chain is always id-type, no contracts).
+    ("bitcoin", "bitcoin"): "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+    # Native ETH: CoinGecko id "ethereum" (the native asset has no contract address).
+    ("ethereum", "ethereum"): "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
 }
 
 
