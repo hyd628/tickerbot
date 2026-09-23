@@ -1,6 +1,6 @@
 import logging
 
-from alertbot.bot import build_application
+from tickerbot.bot import build_application
 
 
 def main() -> None:

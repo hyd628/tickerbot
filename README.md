@@ -52,7 +52,7 @@ subsequent move rather than firing repeatedly for the same move.
 Prices can come from more than one source. Each source (currently
 [Pyth Network](https://pyth.network), [PreStocks](https://prestocks.com),
 and the [CoinGecko API](https://www.coingecko.com/en/api)) is tried in
-priority order — `alertbot/prices.py`'s `SOURCE_PRIORITY` — and the first
+priority order — `tickerbot/prices.py`'s `SOURCE_PRIORITY` — and the first
 one that actually has a price for that specific asset wins; anything a
 source doesn't cover just falls through to the next one. Every price shown
 by the bot (`/watch`, `/price`, `/prices`, and alert messages) says which
@@ -60,7 +60,7 @@ source it came from, e.g. `[Pyth]`, `[PreStocks]`, or `[CoinGecko]`.
 
 - **Pyth** covers a small, explicit set of assets (native SOL, JitoSOL, the
   PYTH token, native BTC, native ETH, native HYPE — see `FEED_IDS` in
-  `alertbot/pyth.py`) when `PYTH_API_KEY` is configured. Pyth doesn't offer
+  `tickerbot/pyth.py`) when `PYTH_API_KEY` is configured. Pyth doesn't offer
   a general way to resolve an arbitrary contract address to a feed, so this
   list is manually maintained rather than automatic, and is restricted to
   whatever's on your key's plan — the free trial's whitelist notably does
@@ -70,7 +70,7 @@ source it came from, e.g. `[Pyth]`, `[PreStocks]`, or `[CoinGecko]`.
   Anthropic, etc. — Solana SPL tokens 1:1-backed by SPV exposure). No API
   key needed; watch them by Solana mint address or by ticker symbol (e.g.
   `/watch solana spacex 5 SpaceX`). The full token list is cached for 60
-  seconds (`CACHE_TTL_SECONDS` in `alertbot/prestocks.py`) since the API
+  seconds (`CACHE_TTL_SECONDS` in `tickerbot/prestocks.py`) since the API
   has an undocumented but real rate limit — confirmed to 429 after just a
   couple of calls in quick succession.
 - **CoinGecko** is the universal fallback: it covers almost anything, by
@@ -90,7 +90,7 @@ Adding a new source is just a new module with a `NAME` and a
 
 ## Data storage
 
-Watches and their state are stored in a local SQLite database (`alertbot.db`
+Watches and their state are stored in a local SQLite database (`tickerbot.db`
 by default, path configurable via `DB_PATH`). No data leaves your machine
 except price lookups to CoinGecko/Pyth/PreStocks and messages sent through
 Telegram.
