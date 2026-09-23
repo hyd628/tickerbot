@@ -1,7 +1,9 @@
 # Ticker-o-Bot
 
-A Telegram bot that alerts you when the price of a Solana, Sui, Ethereum or
-Bitcoin token moves by more than a threshold percentage.
+A Telegram bot that alerts you when a crypto token's price moves by more
+than a threshold percentage — Solana, Sui, Ethereum, Bitcoin, Hyperliquid
+and Robinhood (tokenized stocks) natively, plus (via CoinGecko/PreStocks
+coin id) practically any other asset those sources track.
 
 ## Price sources
 
@@ -15,7 +17,7 @@ by the bot (`/watch`, `/price`, `/prices`, and alert messages) says which
 source it came from, e.g. `[Pyth]`, `[PreStocks]`, or `[CoinGecko]`.
 
 - **Pyth** covers a small, explicit set of assets (native SOL, JitoSOL, the
-  PYTH token, native BTC, native ETH — see `FEED_IDS` in
+  PYTH token, native BTC, native ETH, native HYPE — see `FEED_IDS` in
   `alertbot/pyth.py`) when `PYTH_API_KEY` is configured. Pyth doesn't offer
   a general way to resolve an arbitrary contract address to a feed, so this
   list is manually maintained rather than automatic, and is restricted to
@@ -31,8 +33,14 @@ source it came from, e.g. `[Pyth]`, `[PreStocks]`, or `[CoinGecko]`.
   couple of calls in quick succession.
 - **CoinGecko** is the universal fallback: it covers almost anything, by
   CoinGecko coin id (e.g. `solana`, `sui`, `ethereum`, `bitcoin`, `bonk`)
-  or, for Solana/Sui/Ethereum, by on-chain contract/coin-type address.
-  Bitcoin has no general token-contract standard, so it's id-only.
+  or, for Solana/Sui/Ethereum/Hyperliquid/Robinhood, by on-chain
+  contract/coin-type address. Bitcoin has no general token-contract
+  standard, so it's id-only. Robinhood here means Robinhood's own
+  tokenized-stock platform (Apple, Nvidia, Meta, etc., each its own
+  CoinGecko id/address) — not to be confused with `robinhood-xstock`, a
+  *different* tokenized version of Robinhood's own public stock (ticker
+  HOOD) issued by Backed Finance, which is already watchable today via the
+  `solana` chain like any other xStock.
 
 Adding a new source is just a new module with a `NAME` and a
 `get_prices(chain, ref_type, token_refs)` function, registered in
@@ -77,13 +85,15 @@ Adding a new source is just a new module with a `NAME` and a
 ## Usage
 
 - `/watch <chain> <address_or_id> <threshold_pct> [label]` — start watching
-  a token. `chain` is `solana`, `sui`, `ethereum` or `bitcoin` (`sol`,
-  `eth`, `btc` are also accepted).
+  a token. `chain` is `solana`, `sui`, `ethereum`, `bitcoin`, `hyperliquid`
+  or `robinhood` (`sol`, `eth`, `btc`, `hl`, `hood` are also accepted).
   - `/watch solana solana 5 SOL` (using a CoinGecko coin id)
   - `/watch sui 0x2::sui::SUI 5 SUI` (using a contract/coin-type address)
   - `/watch ethereum 0xdAC17F958D2ee523a2206206994597C13D831ec7 5 USDT`
   - `/watch bitcoin bitcoin 3 BTC` (bitcoin is id-only)
   - `/watch solana bonk 10 BONK` (using a CoinGecko coin id)
+  - `/watch hyperliquid hyperliquid 5 HYPE` (using a CoinGecko coin id)
+  - `/watch robinhood apple-robinhood-tokenized-stock 5 AAPL` (Robinhood's own tokenized stock, by CoinGecko id)
   - `/watch solana spacex 8 SpaceX` (a PreStocks tokenized pre-IPO stock, by ticker)
 - `/list` — show your active watches and their last known (cached) price.
 - `/prices` — fetch and show the current live price of every asset you're

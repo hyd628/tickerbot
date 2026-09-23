@@ -56,6 +56,10 @@ FEED_IDS: dict[tuple[str, str], str] = {
     ("bitcoin", "bitcoin"): "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
     # Native ETH: CoinGecko id "ethereum" (the native asset has no contract address).
     ("ethereum", "ethereum"): "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+    # Native HYPE: CoinGecko id "hyperliquid", or its HyperCore asset id.
+    ("hyperliquid", "hyperliquid"): "4279e31cc369bbcc2faf022b382b080e32a8e689ff20fbc530d2a603eb6cd98b",
+    ("hyperliquid", "0x0d01dc56dcaaca66ad901c959b4011ec"):
+        "4279e31cc369bbcc2faf022b382b080e32a8e689ff20fbc530d2a603eb6cd98b",
 }
 
 

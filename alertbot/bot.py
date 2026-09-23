@@ -15,14 +15,19 @@ PRICE_JOB_NAME = "check_prices"
 # as an italics toggle (breaks on things like "address_or_id"), and real
 # token addresses/labels can contain "_", "<", ">" etc. that would otherwise
 # need careful escaping. HTML only cares about <, >, & (handled below).
-CHAIN_ERROR_MSG = "chain must be one of: solana, sui, ethereum, bitcoin (eth/btc/sol are also accepted)."
+CHAIN_ERROR_MSG = (
+    "chain must be one of: solana, sui, ethereum, bitcoin, hyperliquid, robinhood "
+    "(eth/btc/sol/hl/hood are also accepted)."
+)
 
 HELP_TEXT = (
-    "<b>Ticker-o-Bot</b> — Solana / Sui / Ethereum / Bitcoin price alerts\n\n"
+    "<b>Ticker-o-Bot</b> — crypto price alerts, natively on Solana / Sui / Ethereum / Bitcoin "
+    "and beyond via CoinGecko/PreStocks coin id\n\n"
     "<code>/watch [chain] [address_or_id] [threshold_pct] [label]</code> — start watching a token. "
-    "<code>chain</code> is <code>solana</code>, <code>sui</code>, <code>ethereum</code> or <code>bitcoin</code> "
-    "(<code>eth</code>/<code>btc</code>/<code>sol</code> also work). <code>address_or_id</code> can be "
-    "a contract/coin-type address (solana/sui/ethereum only) or a CoinGecko coin id (e.g. <code>solana</code>, "
+    "<code>chain</code> is <code>solana</code>, <code>sui</code>, <code>ethereum</code>, <code>bitcoin</code>, "
+    "<code>hyperliquid</code> or <code>robinhood</code> (<code>eth</code>/<code>btc</code>/<code>sol</code>/"
+    "<code>hl</code>/<code>hood</code> also work). <code>address_or_id</code> can be a contract/coin-type "
+    "address (solana/sui/ethereum/hyperliquid/robinhood only) or a CoinGecko coin id (e.g. <code>solana</code>, "
     "<code>bitcoin</code>, <code>bonk</code>). Bitcoin has no token contracts, so it's id-only.\n"
     "<code>/list</code> — show your active watches\n"
     "<code>/prices</code> — show the current price of every asset you're watching (once each, even if "
@@ -39,7 +44,9 @@ HELP_TEXT = (
     "<code>/watch sui 0x2::sui::SUI 5 SUI</code>\n"
     "<code>/watch ethereum 0xdAC17F958D2ee523a2206206994597C13D831ec7 5 USDT</code>\n"
     "<code>/watch bitcoin bitcoin 3 BTC</code>\n"
-    "<code>/watch solana spacex 8 SpaceX</code> (a PreStocks tokenized pre-IPO stock, by ticker)"
+    "<code>/watch solana spacex 8 SpaceX</code> (a PreStocks tokenized pre-IPO stock, by ticker)\n"
+    "<code>/watch hyperliquid hyperliquid 5 HYPE</code>\n"
+    "<code>/watch robinhood apple-robinhood-tokenized-stock 5 AAPL</code> (Robinhood's own tokenized stock, by CoinGecko id)"
 )
 
 

@@ -21,6 +21,8 @@ ASSET_PLATFORM = {
     "solana": "solana",
     "sui": "sui",
     "ethereum": "ethereum",
+    "hyperliquid": "hyperliquid",
+    "robinhood": "robinhood",
 }
 
 

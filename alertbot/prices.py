@@ -1,4 +1,5 @@
-"""Multi-source price lookups for Solana, Sui, Ethereum and Bitcoin.
+"""Multi-source price lookups for Solana, Sui, Ethereum, Bitcoin,
+Hyperliquid and Robinhood (tokenized stocks).
 
 Each price source (pyth.py, coingecko.py, ...) implements the same
 interface — get_prices(chain, ref_type, token_refs) -> dict[token_ref
@@ -44,10 +45,17 @@ CHAIN_ALIASES = {
     "eth": "ethereum",
     "bitcoin": "bitcoin",
     "btc": "bitcoin",
+    "hyperliquid": "hyperliquid",
+    "hl": "hyperliquid",
+    "robinhood": "robinhood",
+    "hood": "robinhood",
 }
 
 _SOLANA_ADDRESS_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
 _ETH_ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
+# HyperCore (Hyperliquid's native spot/perp layer) asset ids are shorter than
+# a standard EVM address — e.g. HYPE's own id is 0x0d01dc56dcaaca66ad901c959b4011ec.
+_HYPERLIQUID_ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{32}$")
 
 
 @dataclass(frozen=True)
@@ -79,6 +87,18 @@ def guess_ref_type(chain: str, token_ref: str) -> str:
         return "id"
     if chain == "bitcoin":
         # No token-contract standard to look up on Bitcoin; always a coin id.
+        return "id"
+    if chain == "hyperliquid":
+        if _HYPERLIQUID_ADDRESS_RE.match(token_ref):
+            return "contract"
+        return "id"
+    if chain == "robinhood":
+        # Robinhood's own tokenized-stock platform uses standard EVM-style
+        # addresses (distinct from Backed Finance's xStocks, which are
+        # ordinary Solana/Ethereum SPL/ERC-20 tokens watchable via those
+        # chains already).
+        if _ETH_ADDRESS_RE.match(token_ref):
+            return "contract"
         return "id"
     raise ValueError(f"Unsupported chain: {chain}")
 
