@@ -1,5 +1,7 @@
 # Ticker-o-Bot
 
+<img src="assets/logo.png" alt="Ticker-o-Bot logo" width="120" height="120">
+
 A Telegram bot that alerts you when a crypto token's price moves by more
 than a threshold percentage — Solana, Sui, Ethereum, Bitcoin, Hyperliquid
 and Robinhood (tokenized stocks) natively, plus (via CoinGecko/PreStocks
