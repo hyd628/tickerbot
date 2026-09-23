@@ -90,7 +90,7 @@ async def _send_alert(
         f"{direction} <b>{name}</b> ({chain})\n"
         f"Price: <code>${current:.6g}</code> ({pct_change:+.2f}% since last alert)\n"
         f"Source: {html.escape(source)}\n"
-        f"Threshold: {watch['threshold_pct']}%  |  watch id: {watch['id']}"
+        f"Threshold: {watch['threshold_pct']}%  |  watch id: {watch['chat_seq']}"
     )
     await context.bot.send_message(
         chat_id=watch["chat_id"], text=text, parse_mode="HTML"

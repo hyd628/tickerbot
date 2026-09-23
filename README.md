@@ -1,4 +1,4 @@
-# alertbot
+# Ticker-o-Bot
 
 A Telegram bot that alerts you when the price of a Solana, Sui, Ethereum or
 Bitcoin token moves by more than a threshold percentage.
@@ -6,13 +6,13 @@ Bitcoin token moves by more than a threshold percentage.
 ## Price sources
 
 Prices can come from more than one source. Each source (currently
-[Pyth Network](https://pyth.network) and the
-[CoinGecko API](https://www.coingecko.com/en/api)) is tried in priority
-order — `alertbot/prices.py`'s `SOURCE_PRIORITY` — and the first one that
-actually has a price for that specific asset wins; anything a source
-doesn't cover just falls through to the next one. Every price shown by the
-bot (`/watch`, `/price`, `/prices`, and alert messages) says which source
-it came from, e.g. `[Pyth]` or `[CoinGecko]`.
+[Pyth Network](https://pyth.network), [PreStocks](https://prestocks.com),
+and the [CoinGecko API](https://www.coingecko.com/en/api)) is tried in
+priority order — `alertbot/prices.py`'s `SOURCE_PRIORITY` — and the first
+one that actually has a price for that specific asset wins; anything a
+source doesn't cover just falls through to the next one. Every price shown
+by the bot (`/watch`, `/price`, `/prices`, and alert messages) says which
+source it came from, e.g. `[Pyth]`, `[PreStocks]`, or `[CoinGecko]`.
 
 - **Pyth** covers a small, explicit set of assets (native SOL, JitoSOL, the
   PYTH token, native BTC, native ETH — see `FEED_IDS` in
@@ -20,8 +20,15 @@ it came from, e.g. `[Pyth]` or `[CoinGecko]`.
   a general way to resolve an arbitrary contract address to a feed, so this
   list is manually maintained rather than automatic, and is restricted to
   whatever's on your key's plan — the free trial's whitelist notably does
-  NOT include a Sui feed, so Sui watches always fall through to CoinGecko
-  regardless of whether a key is configured.
+  NOT include a Sui feed, so Sui watches never use Pyth regardless of
+  whether a key is configured.
+- **PreStocks** covers its own tokenized pre-IPO equities (OpenAI, SpaceX,
+  Anthropic, etc. — Solana SPL tokens 1:1-backed by SPV exposure). No API
+  key needed; watch them by Solana mint address or by ticker symbol (e.g.
+  `/watch solana spacex 5 SpaceX`). The full token list is cached for 60
+  seconds (`CACHE_TTL_SECONDS` in `alertbot/prestocks.py`) since the API
+  has an undocumented but real rate limit — confirmed to 429 after just a
+  couple of calls in quick succession.
 - **CoinGecko** is the universal fallback: it covers almost anything, by
   CoinGecko coin id (e.g. `solana`, `sui`, `ethereum`, `bitcoin`, `bonk`)
   or, for Solana/Sui/Ethereum, by on-chain contract/coin-type address.
@@ -72,11 +79,12 @@ Adding a new source is just a new module with a `NAME` and a
 - `/watch <chain> <address_or_id> <threshold_pct> [label]` — start watching
   a token. `chain` is `solana`, `sui`, `ethereum` or `bitcoin` (`sol`,
   `eth`, `btc` are also accepted).
-  - `/watch solana So11111111111111111111111111111111111111112 5 SOL`
-  - `/watch sui 0x2::sui::SUI 5 SUI`
+  - `/watch solana solana 5 SOL` (using a CoinGecko coin id)
+  - `/watch sui 0x2::sui::SUI 5 SUI` (using a contract/coin-type address)
   - `/watch ethereum 0xdAC17F958D2ee523a2206206994597C13D831ec7 5 USDT`
   - `/watch bitcoin bitcoin 3 BTC` (bitcoin is id-only)
   - `/watch solana bonk 10 BONK` (using a CoinGecko coin id)
+  - `/watch solana spacex 8 SpaceX` (a PreStocks tokenized pre-IPO stock, by ticker)
 - `/list` — show your active watches and their last known (cached) price.
 - `/prices` — fetch and show the current live price of every asset you're
   watching, once per asset even if several of your watches point at the
@@ -157,7 +165,14 @@ Telegram (persists in the DB, no redeploy needed) or edit
 
 Watches and their state are stored in a local SQLite database (`alertbot.db`
 by default, path configurable via `DB_PATH`). No data leaves your machine
-except price lookups to CoinGecko and messages sent through Telegram.
+except price lookups to CoinGecko/Pyth/PreStocks and messages sent through
+Telegram.
+
+The watch ids shown in `/list`, alerts, `/unwatch` and `/setinterval` are
+scoped per chat (each chat has its own 1, 2, 3... sequence, stored
+separately from the internal database row id) rather than a single counter
+shared across every chat using the bot — so they never reveal how many
+watches (or users) exist elsewhere.
 
 ## Notes
 

@@ -21,7 +21,14 @@ CREATE TABLE IF NOT EXISTS watches (
     last_price REAL,
     last_checked_at TEXT,
     created_at TEXT NOT NULL,
-    interval_minutes REAL
+    interval_minutes REAL,
+    -- User-facing id, unique only within a chat (starts at 1 per chat). The
+    -- `id` column above is never shown to users: as a single global
+    -- autoincrement counter, it would reveal how many watches exist across
+    -- every chat using the bot. Not NOT-NULL so old-DB migrations that
+    -- rebuild this table (see _migrate_watches_chain_check) don't need to
+    -- backfill it inline; add_watch() always supplies one for new rows.
+    chat_seq INTEGER
 );
 
 -- Per-chat settings (e.g. each chat's own default poll interval). Keyed by
@@ -69,6 +76,25 @@ def _migrate_add_interval_column(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE watches ADD COLUMN interval_minutes REAL")
 
 
+def _migrate_add_chat_seq(conn: sqlite3.Connection) -> None:
+    """Databases created before per-chat watch ids existed are missing this
+    column (or have it present but unpopulated, from a fresh CREATE TABLE
+    on a DB that had no rows yet). Add it if missing, then backfill any
+    NULL values as 1, 2, 3... per chat_id, ordered by creation (id)."""
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(watches)").fetchall()}
+    if "chat_seq" not in cols:
+        conn.execute("ALTER TABLE watches ADD COLUMN chat_seq INTEGER")
+
+    rows = conn.execute(
+        "SELECT id, chat_id FROM watches WHERE chat_seq IS NULL ORDER BY chat_id, id"
+    ).fetchall()
+    counters: dict[int, int] = {}
+    for row in rows:
+        chat_id = row["chat_id"]
+        counters[chat_id] = counters.get(chat_id, 0) + 1
+        conn.execute("UPDATE watches SET chat_seq = ? WHERE id = ?", (counters[chat_id], row["id"]))
+
+
 def _migrate_settings_chat_scope(conn: sqlite3.Connection) -> None:
     """Older databases had a single global `settings` row with no chat_id,
     meaning one chat's /setinterval silently changed the default for every
@@ -104,6 +130,7 @@ def init_db() -> None:
         conn.executescript(SCHEMA)
         _migrate_watches_chain_check(conn)
         _migrate_add_interval_column(conn)
+        _migrate_add_chat_seq(conn)
         _migrate_settings_chat_scope(conn)
 
 
@@ -116,14 +143,20 @@ def add_watch(
     baseline_price: float,
     label: Optional[str] = None,
 ) -> int:
+    """Create a watch and return its chat_seq — the per-chat id (1, 2, 3...)
+    shown to the user, not the internal global row id."""
     now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
-        cur = conn.execute(
+        next_seq = conn.execute(
+            "SELECT COALESCE(MAX(chat_seq), 0) + 1 AS next_seq FROM watches WHERE chat_id = ?",
+            (chat_id,),
+        ).fetchone()["next_seq"]
+        conn.execute(
             """
             INSERT INTO watches
                 (chat_id, chain, ref_type, token_ref, label, threshold_pct,
-                 baseline_price, last_price, last_checked_at, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 baseline_price, last_price, last_checked_at, created_at, chat_seq)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 chat_id,
@@ -136,15 +169,16 @@ def add_watch(
                 baseline_price,
                 now,
                 now,
+                next_seq,
             ),
         )
-        return cur.lastrowid
+        return next_seq
 
 
-def remove_watch(chat_id: int, watch_id: int) -> bool:
+def remove_watch(chat_id: int, chat_seq: int) -> bool:
     with get_conn() as conn:
         cur = conn.execute(
-            "DELETE FROM watches WHERE id = ? AND chat_id = ?", (watch_id, chat_id)
+            "DELETE FROM watches WHERE chat_id = ? AND chat_seq = ?", (chat_id, chat_seq)
         )
         return cur.rowcount > 0
 
@@ -152,7 +186,7 @@ def remove_watch(chat_id: int, watch_id: int) -> bool:
 def list_watches(chat_id: int) -> list[sqlite3.Row]:
     with get_conn() as conn:
         return conn.execute(
-            "SELECT * FROM watches WHERE chat_id = ? ORDER BY id", (chat_id,)
+            "SELECT * FROM watches WHERE chat_id = ? ORDER BY chat_seq", (chat_id,)
         ).fetchall()
 
 
@@ -195,13 +229,13 @@ def min_chat_setting(key: str) -> Optional[float]:
         return row["m"] if row and row["m"] is not None else None
 
 
-def set_watch_interval(chat_id: int, watch_id: int, minutes: Optional[float]) -> bool:
+def set_watch_interval(chat_id: int, chat_seq: int, minutes: Optional[float]) -> bool:
     """Set (or, with minutes=None, clear) a watch's own polling interval.
     Returns False if no such watch exists for this chat."""
     with get_conn() as conn:
         cur = conn.execute(
-            "UPDATE watches SET interval_minutes = ? WHERE id = ? AND chat_id = ?",
-            (minutes, watch_id, chat_id),
+            "UPDATE watches SET interval_minutes = ? WHERE chat_id = ? AND chat_seq = ?",
+            (minutes, chat_id, chat_seq),
         )
         return cur.rowcount > 0
 

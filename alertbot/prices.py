@@ -22,7 +22,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from . import coingecko, pyth
+from . import coingecko, prestocks, pyth
 
 # Sources are tried in this order for every lookup; the first one that can
 # price a given token wins. CoinGecko is last because it's the only source
@@ -30,9 +30,10 @@ from . import coingecko, pyth
 # subset of assets they specifically know about.
 _SOURCES = {
     "pyth": pyth,
+    "prestocks": prestocks,
     "coingecko": coingecko,
 }
-SOURCE_PRIORITY = ["pyth", "coingecko"]
+SOURCE_PRIORITY = ["pyth", "prestocks", "coingecko"]
 
 # Chain names/aliases a user can type, normalized to a canonical chain id.
 CHAIN_ALIASES = {

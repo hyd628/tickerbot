@@ -18,7 +18,7 @@ PRICE_JOB_NAME = "check_prices"
 CHAIN_ERROR_MSG = "chain must be one of: solana, sui, ethereum, bitcoin (eth/btc/sol are also accepted)."
 
 HELP_TEXT = (
-    "<b>Solana / Sui / Ethereum / Bitcoin price alert bot</b>\n\n"
+    "<b>Ticker-o-Bot</b> — Solana / Sui / Ethereum / Bitcoin price alerts\n\n"
     "<code>/watch [chain] [address_or_id] [threshold_pct] [label]</code> — start watching a token. "
     "<code>chain</code> is <code>solana</code>, <code>sui</code>, <code>ethereum</code> or <code>bitcoin</code> "
     "(<code>eth</code>/<code>btc</code>/<code>sol</code> also work). <code>address_or_id</code> can be "
@@ -35,10 +35,11 @@ HELP_TEXT = (
     "polling interval, or 'default' to go back to your default\n"
     "<code>/help</code> — show this message\n\n"
     "Example:\n"
-    "<code>/watch solana So11111111111111111111111111111111111111112 5 SOL</code>\n"
+    "<code>/watch solana solana 5 SOL</code>\n"
     "<code>/watch sui 0x2::sui::SUI 5 SUI</code>\n"
     "<code>/watch ethereum 0xdAC17F958D2ee523a2206206994597C13D831ec7 5 USDT</code>\n"
-    "<code>/watch bitcoin bitcoin 3 BTC</code>"
+    "<code>/watch bitcoin bitcoin 3 BTC</code>\n"
+    "<code>/watch solana spacex 8 SpaceX</code> (a PreStocks tokenized pre-IPO stock, by ticker)"
 )
 
 
@@ -105,8 +106,8 @@ async def watch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.effective_message.reply_text("threshold_pct must be a number, e.g. 5 for 5%.")
         return
 
-    if threshold_pct <= 0:
-        await update.effective_message.reply_text("threshold_pct must be greater than 0.")
+    if threshold_pct < 0:
+        await update.effective_message.reply_text("threshold_pct must not be negative.")
         return
 
     ref_type = prices.guess_ref_type(chain, token_ref)
@@ -129,11 +130,15 @@ async def watch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     name = label or token_ref
-    await update.effective_message.reply_text(
+    reply = (
         f"Watching {name} on {chain} (id {watch_id}). "
         f"Current price: ${baseline.price:.6g} (via {baseline.source}). "
-        f"You'll be alerted on moves of {threshold_pct}% or more."
     )
+    if threshold_pct == 0:
+        reply += "Threshold is 0%, so you'll get an alert on every single check, even with no price change."
+    else:
+        reply += f"You'll be alerted on moves of {threshold_pct}% or more."
+    await update.effective_message.reply_text(reply)
 
 
 async def unwatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -167,7 +172,7 @@ async def list_watches(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     lines = ["Your watches:"]
     for row in rows:
         name = row["label"] or row["token_ref"]
-        line = f"#{row['id']} {name} ({row['chain']}) — threshold {row['threshold_pct']}%"
+        line = f"#{row['chat_seq']} {name} ({row['chain']}) — threshold {row['threshold_pct']}%"
         if row["interval_minutes"] is not None:
             line += f", every {row['interval_minutes']:g} min"
         else:
