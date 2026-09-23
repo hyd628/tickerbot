@@ -20,6 +20,14 @@ CHAIN_ERROR_MSG = (
     "(eth/btc/sol/hl/hood are also accepted)."
 )
 
+# (chain, token_ref, label) set up by /default.
+DEFAULT_WATCHES = [
+    ("bitcoin", "bitcoin", "BTC"),
+    ("ethereum", "ethereum", "ETH"),
+    ("solana", "solana", "SOL"),
+]
+DEFAULT_THRESHOLD_PCT = 1.0
+
 HELP_TEXT = (
     "<b>Ticker-o-Bot</b> — crypto price alerts, natively on Solana / Sui / Ethereum / Bitcoin "
     "and beyond via CoinGecko/PreStocks coin id\n\n"
@@ -29,6 +37,7 @@ HELP_TEXT = (
     "<code>hl</code>/<code>hood</code> also work). <code>address_or_id</code> can be a contract/coin-type "
     "address (solana/sui/ethereum/hyperliquid/robinhood only) or a CoinGecko coin id (e.g. <code>solana</code>, "
     "<code>bitcoin</code>, <code>bonk</code>). Bitcoin has no token contracts, so it's id-only.\n"
+    "<code>/default</code> — watch BTC, ETH and SOL at a 1% threshold in one shot (skips any you're already watching)\n"
     "<code>/list</code> — show your active watches\n"
     "<code>/prices</code> — show the current price of every asset you're watching (once each, even if "
     "you have more than one watch on the same asset)\n"
@@ -146,6 +155,55 @@ async def watch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         reply += f"You'll be alerted on moves of {threshold_pct}% or more."
     await update.effective_message.reply_text(reply)
+
+
+async def default_watches(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    existing_keys = {
+        (row["chain"], row["token_ref"].lower()) for row in db.list_watches(chat_id)
+    }
+
+    added_lines = []
+    skipped_labels = []
+    failed_lines = []
+
+    for chain, token_ref, label in DEFAULT_WATCHES:
+        if (chain, token_ref.lower()) in existing_keys:
+            skipped_labels.append(label)
+            continue
+
+        ref_type = prices.guess_ref_type(chain, token_ref)
+        try:
+            baseline = prices.get_price(chain, ref_type, token_ref)
+        except Exception as exc:
+            logger.exception("Price lookup failed for %s:%s", chain, token_ref)
+            failed_lines.append(f"{label}: couldn't fetch a price ({exc})")
+            continue
+
+        watch_id = db.add_watch(
+            chat_id=chat_id,
+            chain=chain,
+            ref_type=ref_type,
+            token_ref=token_ref,
+            threshold_pct=DEFAULT_THRESHOLD_PCT,
+            baseline_price=baseline.price,
+            label=label,
+        )
+        added_lines.append(f"#{watch_id} {label}: ${baseline.price:.6g} (via {baseline.source})")
+
+    lines = []
+    if added_lines:
+        lines.append(f"Added default watches (threshold {DEFAULT_THRESHOLD_PCT:g}%):")
+        lines.extend(added_lines)
+    if skipped_labels:
+        lines.append(f"Already watching: {', '.join(skipped_labels)}")
+    if failed_lines:
+        lines.append("Failed:")
+        lines.extend(failed_lines)
+    if not lines:
+        lines.append("Nothing to do.")
+
+    await update.effective_message.reply_text("\n".join(lines))
 
 
 async def unwatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -338,6 +396,7 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_cmd))
     application.add_handler(CommandHandler("watch", watch))
+    application.add_handler(CommandHandler("default", default_watches))
     application.add_handler(CommandHandler("unwatch", unwatch))
     application.add_handler(CommandHandler("list", list_watches))
     application.add_handler(CommandHandler("prices", prices_watched))

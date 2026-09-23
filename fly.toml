@@ -6,7 +6,7 @@ primary_region = "nrt" # pick the region closest to you: https://fly.io/docs/ref
 
 [env]
   DB_PATH = "/data/alertbot.db"
-  POLL_INTERVAL_MINUTES = "5"
+  POLL_INTERVAL_MINUTES = "30"
   # BOT_TOKEN is a secret, not set here — see README (fly secrets set).
 
 [[mounts]]
