@@ -5,83 +5,6 @@ than a threshold percentage — Solana, Sui, Ethereum, Bitcoin, Hyperliquid
 and Robinhood (tokenized stocks) natively, plus (via CoinGecko/PreStocks
 coin id) practically any other asset those sources track.
 
-## Price sources
-
-Prices can come from more than one source. Each source (currently
-[Pyth Network](https://pyth.network), [PreStocks](https://prestocks.com),
-and the [CoinGecko API](https://www.coingecko.com/en/api)) is tried in
-priority order — `alertbot/prices.py`'s `SOURCE_PRIORITY` — and the first
-one that actually has a price for that specific asset wins; anything a
-source doesn't cover just falls through to the next one. Every price shown
-by the bot (`/watch`, `/price`, `/prices`, and alert messages) says which
-source it came from, e.g. `[Pyth]`, `[PreStocks]`, or `[CoinGecko]`.
-
-- **Pyth** covers a small, explicit set of assets (native SOL, JitoSOL, the
-  PYTH token, native BTC, native ETH, native HYPE — see `FEED_IDS` in
-  `alertbot/pyth.py`) when `PYTH_API_KEY` is configured. Pyth doesn't offer
-  a general way to resolve an arbitrary contract address to a feed, so this
-  list is manually maintained rather than automatic, and is restricted to
-  whatever's on your key's plan — the free trial's whitelist notably does
-  NOT include a Sui feed, so Sui watches never use Pyth regardless of
-  whether a key is configured.
-- **PreStocks** covers its own tokenized pre-IPO equities (OpenAI, SpaceX,
-  Anthropic, etc. — Solana SPL tokens 1:1-backed by SPV exposure). No API
-  key needed; watch them by Solana mint address or by ticker symbol (e.g.
-  `/watch solana spacex 5 SpaceX`). The full token list is cached for 60
-  seconds (`CACHE_TTL_SECONDS` in `alertbot/prestocks.py`) since the API
-  has an undocumented but real rate limit — confirmed to 429 after just a
-  couple of calls in quick succession.
-- **CoinGecko** is the universal fallback: it covers almost anything, by
-  CoinGecko coin id (e.g. `solana`, `sui`, `ethereum`, `bitcoin`, `bonk`)
-  or, for Solana/Sui/Ethereum/Hyperliquid/Robinhood, by on-chain
-  contract/coin-type address. Bitcoin has no general token-contract
-  standard, so it's id-only. Robinhood here means Robinhood's own
-  tokenized-stock platform (Apple, Nvidia, Meta, etc., each its own
-  CoinGecko id/address) — not to be confused with `robinhood-xstock`, a
-  *different* tokenized version of Robinhood's own public stock (ticker
-  HOOD) issued by Backed Finance, which is already watchable today via the
-  `solana` chain like any other xStock.
-
-Adding a new source is just a new module with a `NAME` and a
-`get_prices(chain, ref_type, token_refs)` function, registered in
-`prices._SOURCES` and added to `SOURCE_PRIORITY`.
-
-## Setup
-
-1. Create a bot with [@BotFather](https://t.me/BotFather) on Telegram and
-   copy the token it gives you.
-2. Create a virtualenv and install dependencies:
-
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-
-3. Copy `.env.example` to `.env` and fill in `BOT_TOKEN`:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-4. (Optional) Get a Pyth API key to use Pyth instead of CoinGecko for a few
-   Solana assets (SOL, JitoSOL, PYTH — see `alertbot/pyth.py` for the exact
-   list): sign up for a free account at
-   [Pyth Terminal](https://terminal.pyth.network) and copy your API key into
-   `PYTH_API_KEY` in `.env`. This gets you a free trial, but its asset
-   whitelist is fixed by Pyth (fine-tuned crypto majors, no Sui feed) and,
-   as of the August 2026 Pyth Core upgrade, sustained/high-volume use of
-   Hermes requires a paid Pyth Pro plan (starting around $500/month) — worth
-   it for a hackathon demo, but think about the cost before relying on it
-   long-term. Leave it blank to just use CoinGecko for everything, which is
-   free and requires no signup.
-
-5. Run the bot:
-
-   ```bash
-   python main.py
-   ```
-
 ## Usage
 
 - `/watch <chain> <address_or_id> <threshold_pct> [label]` — start watching
@@ -124,52 +47,46 @@ last check (or since it started being watched), the bot sends an alert and
 resets the baseline to the new price, so alerts track the size of each
 subsequent move rather than firing repeatedly for the same move.
 
-## Deploying to Fly.io
+## Price sources
 
-The bot runs as a single always-on background process (Telegram long-polling,
-not a web server), with its SQLite database on a small persistent volume so
-data survives restarts and redeploys.
+Prices can come from more than one source. Each source (currently
+[Pyth Network](https://pyth.network), [PreStocks](https://prestocks.com),
+and the [CoinGecko API](https://www.coingecko.com/en/api)) is tried in
+priority order — `alertbot/prices.py`'s `SOURCE_PRIORITY` — and the first
+one that actually has a price for that specific asset wins; anything a
+source doesn't cover just falls through to the next one. Every price shown
+by the bot (`/watch`, `/price`, `/prices`, and alert messages) says which
+source it came from, e.g. `[Pyth]`, `[PreStocks]`, or `[CoinGecko]`.
 
-1. [Install `flyctl`](https://fly.io/docs/flyctl/install/) and sign up/log in:
+- **Pyth** covers a small, explicit set of assets (native SOL, JitoSOL, the
+  PYTH token, native BTC, native ETH, native HYPE — see `FEED_IDS` in
+  `alertbot/pyth.py`) when `PYTH_API_KEY` is configured. Pyth doesn't offer
+  a general way to resolve an arbitrary contract address to a feed, so this
+  list is manually maintained rather than automatic, and is restricted to
+  whatever's on your key's plan — the free trial's whitelist notably does
+  NOT include a Sui feed, so Sui watches never use Pyth regardless of
+  whether a key is configured.
+- **PreStocks** covers its own tokenized pre-IPO equities (OpenAI, SpaceX,
+  Anthropic, etc. — Solana SPL tokens 1:1-backed by SPV exposure). No API
+  key needed; watch them by Solana mint address or by ticker symbol (e.g.
+  `/watch solana spacex 5 SpaceX`). The full token list is cached for 60
+  seconds (`CACHE_TTL_SECONDS` in `alertbot/prestocks.py`) since the API
+  has an undocumented but real rate limit — confirmed to 429 after just a
+  couple of calls in quick succession.
+- **CoinGecko** is the universal fallback: it covers almost anything, by
+  CoinGecko coin id (e.g. `solana`, `sui`, `ethereum`, `bitcoin`, `bonk`)
+  or, for Solana/Sui/Ethereum/Hyperliquid/Robinhood, by on-chain
+  contract/coin-type address. Bitcoin has no general token-contract
+  standard, so it's id-only. Robinhood here means Robinhood's own
+  tokenized-stock platform (Apple, Nvidia, Meta, etc., each its own
+  CoinGecko id/address) — not to be confused with `robinhood-xstock`, a
+  *different* tokenized version of Robinhood's own public stock (ticker
+  HOOD) issued by Backed Finance, which is already watchable today via the
+  `solana` chain like any other xStock.
 
-   ```bash
-   fly auth login
-   ```
-
-2. Edit `fly.toml`: change `app` to a globally-unique name, and
-   `primary_region` to whichever region is closest to you (see
-   `fly platform regions`).
-
-3. Create the app and a 1GB volume for the database (must be in the same
-   region as `primary_region` in `fly.toml`):
-
-   ```bash
-   fly apps create <your-app-name>
-   fly volumes create alertbot_data --size 1 --region <your-region>
-   ```
-
-4. Set your bot token as a secret (never put it in `fly.toml` or commit it):
-
-   ```bash
-   fly secrets set BOT_TOKEN=<token from BotFather>
-   ```
-
-5. Deploy:
-
-   ```bash
-   fly deploy
-   ```
-
-6. Check it's running and watch logs:
-
-   ```bash
-   fly status
-   fly logs
-   ```
-
-To change the poll interval later, either use the `/setinterval` command in
-Telegram (persists in the DB, no redeploy needed) or edit
-`POLL_INTERVAL_MINUTES` in `fly.toml` and redeploy.
+Adding a new source is just a new module with a `NAME` and a
+`get_prices(chain, ref_type, token_refs)` function, registered in
+`prices._SOURCES` and added to `SOURCE_PRIORITY`.
 
 ## Data storage
 
