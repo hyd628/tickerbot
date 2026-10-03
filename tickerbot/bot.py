@@ -30,7 +30,7 @@ DEFAULT_THRESHOLD_PCT = 1.0
 
 HELP_TEXT = (
     "<b>Ticker-o-Bot</b> — crypto price alerts, natively on Solana / Sui / Ethereum / Bitcoin "
-    "and beyond via CoinGecko/PreStocks coin id\n\n"
+    "and beyond, priced via Pyth, CoinGecko and PreStocks (whichever has it first)\n\n"
     "<code>/watch [chain] [address_or_id] [threshold_pct] [label]</code> — start watching a token. "
     "<code>chain</code> is <code>solana</code>, <code>sui</code>, <code>ethereum</code>, <code>bitcoin</code>, "
     "<code>hyperliquid</code> or <code>robinhood</code> (<code>eth</code>/<code>btc</code>/<code>sol</code>/"
