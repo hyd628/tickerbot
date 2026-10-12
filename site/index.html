@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ticker-o-Bot — price alerts on Telegram</title>
+<meta name="description" content="A Telegram bot that alerts you when a token crosses your price target or moves by a threshold — Solana, Sui, Ethereum, Bitcoin, Hyperliquid, Robinhood tokenized stocks and more, priced via Pyth, CoinGecko and PreStocks.">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top">
+      <img src="logo.png" alt="Ticker-o-Bot logo">
+      Ticker-o-Bot
+    </a>
+    <nav class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#chains">Chains</a>
+      <a href="#commands">Commands</a>
+      <a href="https://github.com/hyd628/tickerbot">GitHub</a>
+    </nav>
+    <a class="btn btn-primary" href="https://t.me/ticker_o_bot">Open in Telegram</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero wrap">
+    <h1>Price alerts that live<br><span class="accent-text">where you already are.</span></h1>
+    <p>Ticker-o-Bot watches crypto, tokenized pre-IPO stocks and more, then pings you in Telegram the moment a price crosses your line — no app to check, no dashboard to refresh.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="https://t.me/ticker_o_bot">Open in Telegram</a>
+      <a class="btn btn-secondary" href="https://github.com/hyd628/tickerbot">View on GitHub</a>
+    </div>
+    <div class="source-strip">
+      <span class="pill">Priced via Pyth</span>
+      <span class="pill">PreStocks</span>
+      <span class="pill">CoinGecko</span>
+      <span>— every alert tells you which one</span>
+    </div>
+  </section>
+
+  <section id="features" class="wrap">
+    <div class="section-head">
+      <h2>Built for how you actually watch prices</h2>
+      <p>Two kinds of alerts, a transparent multi-source price pipeline, and settings that never leak between chats.</p>
+    </div>
+    <div class="grid">
+
+      <div class="card">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><path d="M12 6v6M12 12 6.5 16.5M12 12l5.5 4.5"/></svg>
+        </div>
+        <h3>Six chains, one bot</h3>
+        <p>Solana, Sui, Ethereum, Bitcoin, Hyperliquid and Robinhood's tokenized-stock platform — by coin id or on-chain address.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        </div>
+        <h3>Multi-source pricing</h3>
+        <p>Pyth first, then PreStocks, then CoinGecko — whichever actually has the asset. Every price shown names its source.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-8"/><path d="M15 8h5v5"/></svg>
+        </div>
+        <h3>Threshold watches</h3>
+        <p><code>/watch</code> alerts on every move past a percentage you set, then resets its baseline — built for ongoing monitoring.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/></svg>
+        </div>
+        <h3>One-shot price targets</h3>
+        <p><code>/limitalert</code> fires exactly once when a token reaches the level you name, above or below, then removes itself.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l8-5 8 5v12"/><path d="M9 21v-6h6v6"/></svg>
+        </div>
+        <h3>Tokenized stocks</h3>
+        <p>Watch PreStocks' pre-IPO equities (OpenAI, SpaceX, Anthropic) and Robinhood's tokenized stocks by ticker, same as any coin.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        </div>
+        <h3>Private by chat</h3>
+        <p>Watch ids and default intervals are scoped per chat — they never reveal how many watches or users exist elsewhere.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="chains" class="wrap">
+    <div class="section-head">
+      <h2>Where it looks for prices</h2>
+      <p>Pick a chain, give it a coin id or a contract/coin-type address.</p>
+    </div>
+    <div class="chains">
+      <span class="chain-pill">Solana</span>
+      <span class="chain-pill">Sui</span>
+      <span class="chain-pill">Ethereum</span>
+      <span class="chain-pill">Bitcoin</span>
+      <span class="chain-pill">Hyperliquid</span>
+      <span class="chain-pill">Robinhood</span>
+    </div>
+  </section>
+
+  <section id="commands" class="wrap">
+    <div class="section-head">
+      <h2>Command cheatsheet</h2>
+      <p>Everything the bot responds to, straight from <code>/help</code>.</p>
+    </div>
+    <div class="cmd-list mono">
+      <div class="cmd-row"><span class="cmd">/watch chain id price% [label]</span><span class="desc">Start a recurring percentage-threshold watch.</span></div>
+      <div class="cmd-row"><span class="cmd">/limitalert chain id price [label]</span><span class="desc">One-time alert when price reaches a level, then auto-removes.</span></div>
+      <div class="cmd-row"><span class="cmd">/default</span><span class="desc">Watch BTC, ETH and SOL at 1% in one shot.</span></div>
+      <div class="cmd-row"><span class="cmd">/list</span><span class="desc">Show your active watches.</span></div>
+      <div class="cmd-row"><span class="cmd">/prices</span><span class="desc">Live price of everything you're watching, deduped.</span></div>
+      <div class="cmd-row"><span class="cmd">/price chain id</span><span class="desc">Check any price on demand, watched or not.</span></div>
+      <div class="cmd-row"><span class="cmd">/unwatch id</span><span class="desc">Stop watching (id from /list).</span></div>
+      <div class="cmd-row"><span class="cmd">/setinterval [minutes]</span><span class="desc">Your default polling interval, per chat.</span></div>
+      <div class="cmd-row"><span class="cmd">/setinterval id [minutes]</span><span class="desc">Override the interval for one watch.</span></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap footer-row">
+    <span>Ticker-o-Bot — built for the Solana Stocklana hackathon.</span>
+    <a href="https://github.com/hyd628/tickerbot">github.com/hyd628/tickerbot</a>
+  </div>
+</footer>
+
+</body>
+</html>

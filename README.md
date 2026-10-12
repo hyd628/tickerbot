@@ -103,6 +103,14 @@ separately from the internal database row id) rather than a single counter
 shared across every chat using the bot — so they never reveal how many
 watches (or users) exist elsewhere.
 
+## Landing page
+
+`site/` is a static (plain HTML/CSS, no build step, no framework) landing
+page for the bot — deploy it on [Vercel](https://vercel.com) by importing
+this repo and setting the project's **Root Directory** to `site` (since the
+repo root also holds the Python bot, not the site). No other config is
+needed; `site/vercel.json` just turns on clean URLs.
+
 ## Notes
 
 - The public CoinGecko API has rate limits (roughly 10-30 requests/minute).
