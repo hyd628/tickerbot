@@ -28,7 +28,13 @@ CREATE TABLE IF NOT EXISTS watches (
     -- every chat using the bot. Not NOT-NULL so old-DB migrations that
     -- rebuild this table (see _migrate_watches_chain_check) don't need to
     -- backfill it inline; add_watch() always supplies one for new rows.
-    chat_seq INTEGER
+    chat_seq INTEGER,
+    -- One-shot price-level alerts (/limitalert): NULL on ordinary percentage
+    -- watches. When target_price is set, monitor.py ignores threshold_pct
+    -- entirely and instead fires once the price reaches target_price in
+    -- target_direction ('above' or 'below'), then deletes the watch.
+    target_price REAL,
+    target_direction TEXT CHECK(target_direction IN ('above', 'below') OR target_direction IS NULL)
 );
 
 -- Per-chat settings (e.g. each chat's own default poll interval). Keyed by
@@ -95,6 +101,20 @@ def _migrate_add_chat_seq(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE watches SET chat_seq = ? WHERE id = ?", (counters[chat_id], row["id"]))
 
 
+def _migrate_add_price_alert_columns(conn: sqlite3.Connection) -> None:
+    """Databases created before one-shot price-level alerts (/limitalert)
+    existed are missing these columns; add them (NULL = an ordinary
+    percentage watch, not a price-level alert)."""
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(watches)").fetchall()}
+    if "target_price" not in cols:
+        conn.execute("ALTER TABLE watches ADD COLUMN target_price REAL")
+    if "target_direction" not in cols:
+        conn.execute(
+            "ALTER TABLE watches ADD COLUMN target_direction TEXT "
+            "CHECK(target_direction IN ('above', 'below') OR target_direction IS NULL)"
+        )
+
+
 def _migrate_settings_chat_scope(conn: sqlite3.Connection) -> None:
     """Older databases had a single global `settings` row with no chat_id,
     meaning one chat's /setinterval silently changed the default for every
@@ -131,6 +151,7 @@ def init_db() -> None:
         _migrate_watches_chain_check(conn)
         _migrate_add_interval_column(conn)
         _migrate_add_chat_seq(conn)
+        _migrate_add_price_alert_columns(conn)
         _migrate_settings_chat_scope(conn)
 
 
@@ -170,6 +191,51 @@ def add_watch(
                 now,
                 now,
                 next_seq,
+            ),
+        )
+        return next_seq
+
+
+def add_price_alert(
+    chat_id: int,
+    chain: str,
+    ref_type: str,
+    token_ref: str,
+    target_price: float,
+    target_direction: str,
+    current_price: float,
+    label: Optional[str] = None,
+) -> int:
+    """Create a one-shot price-level alert (/limitalert) and return its
+    chat_seq. threshold_pct is stored as 0 and never consulted — monitor.py
+    branches on target_price being set before it would look at it."""
+    now = datetime.now(timezone.utc).isoformat()
+    with get_conn() as conn:
+        next_seq = conn.execute(
+            "SELECT COALESCE(MAX(chat_seq), 0) + 1 AS next_seq FROM watches WHERE chat_id = ?",
+            (chat_id,),
+        ).fetchone()["next_seq"]
+        conn.execute(
+            """
+            INSERT INTO watches
+                (chat_id, chain, ref_type, token_ref, label, threshold_pct,
+                 baseline_price, last_price, last_checked_at, created_at, chat_seq,
+                 target_price, target_direction)
+            VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                chat_id,
+                chain,
+                ref_type,
+                token_ref,
+                label,
+                current_price,
+                current_price,
+                now,
+                now,
+                next_seq,
+                target_price,
+                target_direction,
             ),
         )
         return next_seq

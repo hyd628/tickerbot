@@ -62,6 +62,25 @@ async def check_prices(context: ContextTypes.DEFAULT_TYPE) -> None:
                 continue
             current = result.price
 
+            if watch["target_price"] is not None:
+                triggered = (
+                    current >= watch["target_price"]
+                    if watch["target_direction"] == "above"
+                    else current <= watch["target_price"]
+                )
+                logger.info(
+                    "price alert %s (%s:%s): current=%.6g target=%.6g (%s) triggered=%s source=%s",
+                    watch["id"], chain, watch["token_ref"], current, watch["target_price"],
+                    watch["target_direction"], triggered, result.source,
+                )
+                if triggered:
+                    await _send_target_alert(context, watch, current, result.source)
+                    # One-shot: remove rather than reset, unlike percentage watches.
+                    db.remove_watch(watch["chat_id"], watch["chat_seq"])
+                else:
+                    db.update_after_check(watch["id"], current)
+                continue
+
             baseline = watch["baseline_price"]
             pct_change = (current - baseline) / baseline * 100 if baseline else 0.0
             logger.info(
@@ -91,6 +110,24 @@ async def _send_alert(
         f"Price: <code>${current:.6g}</code> ({pct_change:+.2f}% since last alert)\n"
         f"Source: {html.escape(source)}\n"
         f"Threshold: {watch['threshold_pct']}%  |  watch id: {watch['chat_seq']}"
+    )
+    await context.bot.send_message(
+        chat_id=watch["chat_id"], text=text, parse_mode="HTML"
+    )
+
+
+async def _send_target_alert(
+    context: ContextTypes.DEFAULT_TYPE, watch, current: float, source: str
+) -> None:
+    name = html.escape(watch["label"] or watch["token_ref"])
+    chain = html.escape(watch["chain"])
+    verb = "risen to" if watch["target_direction"] == "above" else "fallen to"
+    text = (
+        f"\U0001F3AF <b>{name}</b> ({chain})\n"
+        f"Price has {verb} <code>${current:.6g}</code>, past your target of "
+        f"<code>${watch['target_price']:.6g}</code>\n"
+        f"Source: {html.escape(source)}\n"
+        f"This was a one-shot alert and has been removed."
     )
     await context.bot.send_message(
         chat_id=watch["chat_id"], text=text, parse_mode="HTML"

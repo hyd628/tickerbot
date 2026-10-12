@@ -38,6 +38,8 @@ HELP_TEXT = (
     "address (solana/sui/ethereum/hyperliquid/robinhood only) or a CoinGecko coin id (e.g. <code>solana</code>, "
     "<code>bitcoin</code>, <code>bonk</code>). Bitcoin has no token contracts, so it's id-only.\n"
     "<code>/default</code> — watch BTC, ETH and SOL at a 1% threshold in one shot (skips any you're already watching)\n"
+    "<code>/limitalert [chain] [address_or_id] [price] [label]</code> — one-time alert when the price reaches a "
+    "specific level (above or below, auto-detected from the current price); removes itself after firing\n"
     "<code>/list</code> — show your active watches\n"
     "<code>/prices</code> — show the current price of every asset you're watching (once each, even if "
     "you have more than one watch on the same asset)\n"
@@ -55,7 +57,8 @@ HELP_TEXT = (
     "<code>/watch bitcoin bitcoin 3 BTC</code>\n"
     "<code>/watch solana spacex 8 SpaceX</code> (a PreStocks tokenized pre-IPO stock, by ticker)\n"
     "<code>/watch hyperliquid hyperliquid 5 HYPE</code>\n"
-    "<code>/watch robinhood apple-robinhood-tokenized-stock 5 AAPL</code> (Robinhood's own tokenized stock, by CoinGecko id)"
+    "<code>/watch robinhood apple-robinhood-tokenized-stock 5 AAPL</code> (Robinhood's own tokenized stock, by CoinGecko id)\n"
+    "<code>/limitalert solana solana 200 SOL to the moon</code> (one-time alert when SOL reaches $200)"
 )
 
 
@@ -206,6 +209,69 @@ async def default_watches(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.effective_message.reply_text("\n".join(lines))
 
 
+async def limit_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    args = context.args
+    if len(args) < 3:
+        await update.effective_message.reply_text(
+            "Usage: /limitalert <chain> <address_or_id> <price> [label]\n"
+            "One-shot: alerts once the price reaches that level, then removes itself."
+        )
+        return
+
+    chain = prices.normalize_chain(args[0])
+    token_ref = args[1]
+    label = " ".join(args[3:]) or None
+
+    if chain is None:
+        await update.effective_message.reply_text(CHAIN_ERROR_MSG)
+        return
+
+    try:
+        target_price = float(args[2])
+    except ValueError:
+        await update.effective_message.reply_text("price must be a number, e.g. 150 for $150.")
+        return
+
+    if target_price <= 0:
+        await update.effective_message.reply_text("price must be greater than 0.")
+        return
+
+    ref_type = prices.guess_ref_type(chain, token_ref)
+
+    try:
+        current = prices.get_price(chain, ref_type, token_ref)
+    except Exception as exc:
+        logger.exception("Price lookup failed for %s:%s", chain, token_ref)
+        await update.effective_message.reply_text(f"Couldn't fetch a price for that token: {exc}")
+        return
+
+    if target_price == current.price:
+        await update.effective_message.reply_text(
+            f"That's already the current price (${current.price:.6g}) — pick a level above or below it."
+        )
+        return
+
+    direction = "above" if target_price > current.price else "below"
+
+    watch_id = db.add_price_alert(
+        chat_id=update.effective_chat.id,
+        chain=chain,
+        ref_type=ref_type,
+        token_ref=token_ref,
+        target_price=target_price,
+        target_direction=direction,
+        current_price=current.price,
+        label=label,
+    )
+
+    name = label or token_ref
+    verb = "rises to" if direction == "above" else "falls to"
+    await update.effective_message.reply_text(
+        f"Watching {name} on {chain} (id {watch_id}). Current price: ${current.price:.6g} "
+        f"(via {current.source}). You'll get a one-time alert when it {verb} ${target_price:.6g} or beyond."
+    )
+
+
 async def unwatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
         await update.effective_message.reply_text("Usage: /unwatch <id> (see /list for ids)")
@@ -237,7 +303,11 @@ async def list_watches(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     lines = ["Your watches:"]
     for row in rows:
         name = row["label"] or row["token_ref"]
-        line = f"#{row['chat_seq']} {name} ({row['chain']}) — threshold {row['threshold_pct']}%"
+        if row["target_price"] is not None:
+            verb = "rises to" if row["target_direction"] == "above" else "falls to"
+            line = f"#{row['chat_seq']} {name} ({row['chain']}) — one-shot alert when it {verb} ${row['target_price']:.6g}"
+        else:
+            line = f"#{row['chat_seq']} {name} ({row['chain']}) — threshold {row['threshold_pct']}%"
         if row["interval_minutes"] is not None:
             line += f", every {row['interval_minutes']:g} min"
         else:
@@ -397,6 +467,7 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("help", help_cmd))
     application.add_handler(CommandHandler("watch", watch))
     application.add_handler(CommandHandler("default", default_watches))
+    application.add_handler(CommandHandler("limitalert", limit_alert))
     application.add_handler(CommandHandler("unwatch", unwatch))
     application.add_handler(CommandHandler("list", list_watches))
     application.add_handler(CommandHandler("prices", prices_watched))
