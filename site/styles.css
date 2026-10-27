@@ -247,25 +247,25 @@ section {
 .chains {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 18px;
   justify-content: center;
 }
 
 .chain-pill {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 18px;
   background: var(--surface);
   border: 1px solid var(--surface-border);
   border-radius: 999px;
-  padding: 7px 16px 7px 10px;
-  font-size: 13.5px;
+  padding: 16px 38px 16px 16px;
+  font-size: 20px;
   font-weight: 600;
 }
 
 .chain-pill svg {
-  width: 22px;
-  height: 22px;
+  width: 60px;
+  height: 60px;
   flex-shrink: 0;
   border-radius: 50%;
 }
