@@ -5,3 +5,13 @@ venv/
 .env
 *.db
 .claude/
+.DS_Store
+
+# Local-only media dropped in assets/ for demo/reference purposes — not
+# meant to be committed. assets/logo.png (tracked) is unaffected since
+# these are listed by exact name, not a glob.
+assets/alertcap.mp4
+assets/alertscreen.jpg
+assets/cave.jpg
+assets/demoraw.mp4
+assets/passportphoto.jpeg
