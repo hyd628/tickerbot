@@ -88,7 +88,16 @@ def _reschedule_price_job(application: Application, minutes: float) -> None:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.effective_message.reply_text(HELP_TEXT, parse_mode="HTML")
+    default_lines = await _setup_default_watches(update.effective_chat.id)
+    text = (
+        "Welcome to Ticker-o-Bot — crypto price alerts on Solana, Sui, Ethereum, Bitcoin, "
+        "Hyperliquid, Robinhood tokenized stocks and more, priced via Pyth, CoinGecko and "
+        "PreStocks (whichever has it first).\n\n"
+        + "\n".join(default_lines)
+        + "\n\nSend /help to see every command — custom watches, one-time price targets, "
+        "intervals, and more."
+    )
+    await update.effective_message.reply_text(text)
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -160,8 +169,11 @@ async def watch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text(reply)
 
 
-async def default_watches(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.effective_chat.id
+async def _setup_default_watches(chat_id: int) -> list[str]:
+    """Add the default BTC/ETH/SOL watches for chat_id (skipping any that
+    already exist) and return status lines describing what happened, without
+    sending anything — shared by /start (folded into the welcome message)
+    and /default (sent on its own)."""
     existing_keys = {
         (row["chain"], row["token_ref"].lower()) for row in db.list_watches(chat_id)
     }
@@ -206,6 +218,11 @@ async def default_watches(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not lines:
         lines.append("Nothing to do.")
 
+    return lines
+
+
+async def default_watches(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    lines = await _setup_default_watches(update.effective_chat.id)
     await update.effective_message.reply_text("\n".join(lines))
 
 
