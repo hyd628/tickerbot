@@ -159,21 +159,6 @@ header {
   margin-bottom: 36px;
 }
 
-.source-strip {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  flex-wrap: wrap;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.pill {
-  border: 1px solid var(--surface-border);
-  border-radius: 999px;
-  padding: 5px 12px;
-}
-
 /* ---- Sections ---- */
 
 section {
