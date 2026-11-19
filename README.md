@@ -51,23 +51,24 @@ subsequent move rather than firing repeatedly for the same move.
 
 ## Price sources
 
-Prices can come from more than one source. Each source (currently
-[Pyth Network](https://pyth.network), [PreStocks](https://prestocks.com),
-and the [CoinGecko API](https://www.coingecko.com/en/api)) is tried in
-priority order — `tickerbot/prices.py`'s `SOURCE_PRIORITY` — and the first
-one that actually has a price for that specific asset wins; anything a
-source doesn't cover just falls through to the next one. Every price shown
-by the bot (`/watch`, `/price`, `/prices`, and alert messages) says which
-source it came from, e.g. `[Pyth]`, `[PreStocks]`, or `[CoinGecko]`.
+Prices can come from more than one source. Each source is tried in priority
+order — `tickerbot/prices.py`'s `SOURCE_PRIORITY` — and the first one that
+actually has a price for that specific asset wins; anything a source doesn't
+cover just falls through to the next one. Every price shown by the bot
+(`/watch`, `/price`, `/prices`, and alert messages) says which source it
+came from, e.g. `[Binance]`, `[DexScreener]`, `[PreStocks]`, or `[CoinGecko]`.
 
-- **Pyth** covers a small, explicit set of assets (native SOL, JitoSOL, the
-  PYTH token, native BTC, native ETH, native HYPE — see `FEED_IDS` in
-  `tickerbot/pyth.py`) when `PYTH_API_KEY` is configured. Pyth doesn't offer
-  a general way to resolve an arbitrary contract address to a feed, so this
-  list is manually maintained rather than automatic, and is restricted to
-  whatever's on your key's plan — the free trial's whitelist notably does
-  NOT include a Sui feed, so Sui watches never use Pyth regardless of
-  whether a key is configured.
+- **Binance** serves native BTC/ETH/SOL prices pushed over a persistent
+  public WebSocket connection (`tickerbot/binance_realtime.py`), updated
+  roughly once a second with no API key and no polling. This is also what
+  makes `/limitalert` real-time for these three assets: every price that
+  arrives over the socket is immediately checked against active limit
+  alerts and fires within about a second of crossing, instead of waiting
+  for the next poll cycle (up to `POLL_INTERVAL_MINUTES`).
+- **DexScreener** covers Solana and Sui tokens by contract/coin-type
+  address, sourced directly from live on-chain DEX pair data (no API key).
+  Useful for tokens CoinGecko only refreshes occasionally — when a token
+  trades on multiple pairs, the pair with the most USD liquidity is used.
 - **PreStocks** covers its own tokenized pre-IPO equities (OpenAI, SpaceX,
   Anthropic, etc. — Solana SPL tokens 1:1-backed by SPV exposure). No API
   key needed; watch them by Solana mint address or by ticker symbol (e.g.
@@ -94,8 +95,8 @@ Adding a new source is just a new module with a `NAME` and a
 
 Watches and their state are stored in a local SQLite database (`tickerbot.db`
 by default, path configurable via `DB_PATH`). No data leaves your machine
-except price lookups to CoinGecko/Pyth/PreStocks and messages sent through
-Telegram.
+except price lookups to Binance/DexScreener/CoinGecko/PreStocks and messages
+sent through Telegram.
 
 The watch ids shown in `/list`, alerts, `/unwatch` and `/setinterval` are
 scoped per chat (each chat has its own 1, 2, 3... sequence, stored

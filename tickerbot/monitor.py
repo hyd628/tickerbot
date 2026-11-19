@@ -1,11 +1,10 @@
-import html
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 from telegram.ext import ContextTypes
 
-from . import config, db, prices
+from . import alerts, config, db, prices
 
 logger = logging.getLogger(__name__)
 
@@ -63,22 +62,9 @@ async def check_prices(context: ContextTypes.DEFAULT_TYPE) -> None:
             current = result.price
 
             if watch["target_price"] is not None:
-                triggered = (
-                    current >= watch["target_price"]
-                    if watch["target_direction"] == "above"
-                    else current <= watch["target_price"]
-                )
-                logger.info(
-                    "price alert %s (%s:%s): current=%.6g target=%.6g (%s) triggered=%s source=%s",
-                    watch["id"], chain, watch["token_ref"], current, watch["target_price"],
-                    watch["target_direction"], triggered, result.source,
-                )
-                if triggered:
-                    await _send_target_alert(context, watch, current, result.source)
-                    # One-shot: remove rather than reset, unlike percentage watches.
-                    db.remove_watch(watch["chat_id"], watch["chat_seq"])
-                else:
-                    db.update_after_check(watch["id"], current)
+                # Shared with the real-time push path (binance_realtime.py)
+                # so a watch can't be double-fired by both.
+                await alerts.check_target_watch(context.bot, watch, current, result.source)
                 continue
 
             baseline = watch["baseline_price"]
@@ -90,45 +76,7 @@ async def check_prices(context: ContextTypes.DEFAULT_TYPE) -> None:
             )
 
             if abs(pct_change) >= watch["threshold_pct"]:
-                await _send_alert(context, watch, current, pct_change, result.source)
+                await alerts.send_threshold_alert(context.bot, watch, current, pct_change, result.source)
                 db.update_after_check(watch["id"], current, new_baseline=current)
             else:
                 db.update_after_check(watch["id"], current)
-
-
-async def _send_alert(
-    context: ContextTypes.DEFAULT_TYPE, watch, current: float, pct_change: float, source: str
-) -> None:
-    direction = "\U0001F4C8" if pct_change >= 0 else "\U0001F4C9"
-    # Labels/addresses are user-supplied (and real Sui coin types can contain
-    # "<", ">", "&" from generic type params), so escape before embedding in
-    # an HTML-parsed message.
-    name = html.escape(watch["label"] or watch["token_ref"])
-    chain = html.escape(watch["chain"])
-    text = (
-        f"{direction} <b>{name}</b> ({chain})\n"
-        f"Price: <code>${current:.6g}</code> ({pct_change:+.2f}% since last alert)\n"
-        f"Source: {html.escape(source)}\n"
-        f"Threshold: {watch['threshold_pct']}%  |  watch id: {watch['chat_seq']}"
-    )
-    await context.bot.send_message(
-        chat_id=watch["chat_id"], text=text, parse_mode="HTML"
-    )
-
-
-async def _send_target_alert(
-    context: ContextTypes.DEFAULT_TYPE, watch, current: float, source: str
-) -> None:
-    name = html.escape(watch["label"] or watch["token_ref"])
-    chain = html.escape(watch["chain"])
-    verb = "risen to" if watch["target_direction"] == "above" else "fallen to"
-    text = (
-        f"\U0001F3AF <b>{name}</b> ({chain})\n"
-        f"Price has {verb} <code>${current:.6g}</code>, past your target of "
-        f"<code>${watch['target_price']:.6g}</code>\n"
-        f"Source: {html.escape(source)}\n"
-        f"This was a one-shot alert and has been removed."
-    )
-    await context.bot.send_message(
-        chat_id=watch["chat_id"], text=text, parse_mode="HTML"
-    )

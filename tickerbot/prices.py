@@ -1,7 +1,7 @@
 """Multi-source price lookups for Solana, Sui, Ethereum, Bitcoin,
 Hyperliquid and Robinhood (tokenized stocks).
 
-Each price source (pyth.py, coingecko.py, ...) implements the same
+Each price source (dexscreener.py, coingecko.py, ...) implements the same
 interface — get_prices(chain, ref_type, token_refs) -> dict[token_ref
 lowercased -> price] — and only returns the subset of token_refs it can
 actually price; anything it can't is simply absent from its result. This
@@ -23,18 +23,26 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from . import coingecko, prestocks, pyth
+from . import binance_realtime, coingecko, dexscreener, prestocks
 
 # Sources are tried in this order for every lookup; the first one that can
-# price a given token wins. CoinGecko is last because it's the only source
-# with near-universal coverage — earlier sources only need to cover the
-# subset of assets they specifically know about.
+# price a given token wins. binance_realtime and dexscreener come first
+# because they're push-based/live-on-chain (and binance_realtime is what
+# makes limit alerts fire in real time); CoinGecko is last because it's the
+# only source with near-universal coverage — earlier sources only need to
+# cover the subset of assets they specifically know about.
+#
+# Pyth used to sit at the front of this list, but its free trial has expired
+# and ongoing API access now costs $500+/month, so it's no longer in active
+# rotation (the module is still in the codebase in case a paid key is added
+# back later).
 _SOURCES = {
-    "pyth": pyth,
+    "binance_realtime": binance_realtime,
+    "dexscreener": dexscreener,
     "prestocks": prestocks,
     "coingecko": coingecko,
 }
-SOURCE_PRIORITY = ["pyth", "prestocks", "coingecko"]
+SOURCE_PRIORITY = ["binance_realtime", "dexscreener", "prestocks", "coingecko"]
 
 # Chain names/aliases a user can type, normalized to a canonical chain id.
 CHAIN_ALIASES = {

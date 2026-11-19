@@ -1,10 +1,11 @@
+import asyncio
 import logging
 from collections import defaultdict
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from . import config, db, prices
+from . import binance_realtime, config, db, prices
 from .monitor import check_prices
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,9 @@ DEFAULT_THRESHOLD_PCT = 1.0
 
 HELP_TEXT = (
     "<b>Ticker-o-Bot</b> — crypto price alerts, natively on Solana / Sui / Ethereum / Bitcoin "
-    "and beyond, priced via Pyth, CoinGecko and PreStocks (whichever has it first)\n\n"
+    "and beyond, priced via Binance (real-time BTC/ETH/SOL), DexScreener, CoinGecko and "
+    "PreStocks (whichever has it first). Limit alerts on BTC/ETH/SOL fire within about a "
+    "second of the price crossing, not on the next poll.\n\n"
     "<code>/watch [chain] [address_or_id] [threshold_pct] [label]</code> — start watching a token. "
     "<code>chain</code> is <code>solana</code>, <code>sui</code>, <code>ethereum</code>, <code>bitcoin</code>, "
     "<code>hyperliquid</code> or <code>robinhood</code> (<code>eth</code>/<code>btc</code>/<code>sol</code>/"
@@ -91,8 +94,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     default_lines = await _setup_default_watches(update.effective_chat.id)
     text = (
         "Welcome to Ticker-o-Bot — crypto price alerts on Solana, Sui, Ethereum, Bitcoin, "
-        "Hyperliquid, Robinhood tokenized stocks and more, priced via Pyth, CoinGecko and "
-        "PreStocks (whichever has it first).\n\n"
+        "Hyperliquid, Robinhood tokenized stocks and more, priced via Binance, DexScreener, "
+        "CoinGecko and PreStocks (whichever has it first).\n\n"
         + "\n".join(default_lines)
         + "\n\nSend /help to see every command — custom watches, one-time price targets, "
         "intervals, and more."
@@ -472,13 +475,24 @@ async def set_interval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.effective_message.reply_text(f"Watch {watch_id} will be checked every {minutes:g} minute(s).")
 
 
+async def _start_binance_realtime(application: Application) -> None:
+    """Launched via post_init, once the application's event loop is running,
+    so the Binance WebSocket connection (and the instant limit-alert checks
+    it drives) runs for the lifetime of the bot process."""
+    application.bot_data["binance_realtime_task"] = asyncio.create_task(
+        binance_realtime.run_forever(application.bot)
+    )
+
+
 def build_application() -> Application:
     if not config.BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN is not set. Copy .env.example to .env and fill it in.")
 
     db.init_db()
 
-    application = Application.builder().token(config.BOT_TOKEN).build()
+    application = (
+        Application.builder().token(config.BOT_TOKEN).post_init(_start_binance_realtime).build()
+    )
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_cmd))
